@@ -1,0 +1,48 @@
+apiVersion: nap.nupi.ai/v1alpha1
+kind: Plugin
+type: adapter
+metadata:
+  name: Nupi ElevenLabs Remote TTS
+  catalog: ai.nupi
+  slug: tts-remote-elevenlabs
+  description: Remote text-to-speech adapter backed by ElevenLabs API.
+  version: 1.0.0
+spec:
+  slot: tts
+  mode: remote
+  homepage: https://github.com/nupi-ai/plugin-tts-remote-elevenlabs
+  compatibility:
+    nupi: ">=0.0.0-dev"
+  entrypoint:
+    command: ./tts-remote-elevenlabs
+    args: []
+    transport: process
+    listenEnv: NUPI_ADAPTER_LISTEN_ADDR
+    readyTimeout: 10s
+  options:
+    api_key:
+      type: string
+      description: ElevenLabs API key (required). Get yours at https://elevenlabs.io/
+    voice_id:
+      type: string
+      default: UgBBYS2sOqTuMpoF3BR0
+      description: ElevenLabs voice ID (default is Mark).
+    model:
+      type: string
+      default: eleven_turbo_v2_5
+      description: ElevenLabs model to use for synthesis. See https://elevenlabs.io/docs/models for available models.
+    stability:
+      type: number
+      default: 0.5
+      description: Voice stability (0.0-1.0). Higher = more consistent, lower = more expressive.
+    similarity_boost:
+      type: number
+      default: 0.75
+      description: Voice similarity (0.0-1.0). Higher = closer to original voice.
+    optimize_streaming_latency:
+      type: integer
+      default: 0
+      description: Latency optimization level (0-4). Higher = faster but potentially lower quality.
+  telemetry:
+    stdout: true
+    stderr: true
