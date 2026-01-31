@@ -9,7 +9,6 @@ metadata:
   version: 1.0.0
 spec:
   slot: tts
-  mode: remote
   homepage: https://github.com/nupi-ai/plugin-tts-remote-elevenlabs
   compatibility:
     nupi: ">=0.0.0-dev"
