@@ -61,6 +61,16 @@ func TestValidateStabilityRange(t *testing.T) {
 	}
 }
 
+func TestValidateStubSkipsAPIKey(t *testing.T) {
+	cfg := Config{
+		ListenAddr:         "127.0.0.1:50051",
+		UseStubSynthesizer: true,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected no error when UseStubSynthesizer=true and APIKey empty, got: %v", err)
+	}
+}
+
 func TestValidateCacheMaxSizeMB(t *testing.T) {
 	cfg := Config{
 		ListenAddr:     "127.0.0.1:50051",

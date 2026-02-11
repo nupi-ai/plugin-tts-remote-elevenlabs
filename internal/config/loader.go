@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -33,6 +34,9 @@ func (l Loader) Load() (Config, error) {
 
 	overrideString(l.Lookup, "NUPI_ADAPTER_LISTEN_ADDR", &cfg.ListenAddr)
 	overrideString(l.Lookup, "NUPI_LOG_LEVEL", &cfg.LogLevel)
+	if err := overrideBool(l.Lookup, "NUPI_ADAPTER_USE_STUB_SYNTHESIZER", &cfg.UseStubSynthesizer); err != nil {
+		return Config{}, err
+	}
 
 	// Default cache directory
 	if cfg.CacheDir == "" {
@@ -59,6 +63,7 @@ func applyJSON(raw string, cfg *Config) error {
 		OptimizeStreamingLatency *int     `json:"optimize_streaming_latency"`
 		CacheDir                 string   `json:"cache_dir"`
 		CacheMaxSizeMB           *int     `json:"cache_max_size_mb"`
+		UseStubSynthesizer       bool     `json:"use_stub_synthesizer"`
 	}
 	var payload jsonConfig
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
@@ -94,6 +99,9 @@ func applyJSON(raw string, cfg *Config) error {
 	if payload.CacheMaxSizeMB != nil {
 		cfg.CacheMaxSizeMB = *payload.CacheMaxSizeMB
 	}
+	if payload.UseStubSynthesizer {
+		cfg.UseStubSynthesizer = true
+	}
 	return nil
 }
 
@@ -114,4 +122,18 @@ func assignFloat64Ptr(target **float64, value float64) {
 func assignIntPtr(target **int, value int) {
 	v := value
 	*target = &v
+}
+
+func overrideBool(lookup func(string) (string, bool), key string, target *bool) error {
+	if lookup == nil || target == nil {
+		return nil
+	}
+	if value, ok := lookup(key); ok && strings.TrimSpace(value) != "" {
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("config: invalid value for %s: %w", key, err)
+		}
+		*target = parsed
+	}
+	return nil
 }

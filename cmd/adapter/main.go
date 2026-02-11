@@ -103,9 +103,15 @@ func main() {
 	}()
 	logger.Info("gRPC server started (NOT_SERVING while initializing)")
 
-	// STEP 4: Initialize ElevenLabs client
-	client := elevenlabs.NewClient(cfg.APIKey)
-	logger.Info("ElevenLabs client initialized")
+	// STEP 4: Initialize synthesizer
+	var synthesizer elevenlabs.Synthesizer
+	if cfg.UseStubSynthesizer {
+		synthesizer = elevenlabs.NewStubSynthesizer(logger)
+		logger.Info("using STUB synthesizer — responses are deterministic, NOT from ElevenLabs API")
+	} else {
+		synthesizer = elevenlabs.NewClient(cfg.APIKey)
+		logger.Info("ElevenLabs client initialized")
+	}
 
 	// STEP 5: Initialize cache (if configured)
 	var audioCache *cache.Cache
@@ -120,7 +126,7 @@ func main() {
 	}
 
 	// STEP 6: Activate the real TTS service now that client is ready
-	realService := server.New(cfg, logger, client, recorder, audioCache)
+	realService := server.New(cfg, logger, synthesizer, recorder, audioCache)
 	lazyService.setServer(realService)
 
 	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)

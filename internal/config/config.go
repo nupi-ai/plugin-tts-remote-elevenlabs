@@ -28,6 +28,9 @@ type Config struct {
 	// Cache settings
 	CacheDir       string
 	CacheMaxSizeMB int
+
+	// Stub mode — use deterministic synthesizer instead of real API (CI/testing).
+	UseStubSynthesizer bool
 }
 
 // Validate applies defaults and raises an error when required fields are missing.
@@ -35,7 +38,7 @@ func (c *Config) Validate() error {
 	if c.ListenAddr == "" {
 		return fmt.Errorf("config: listen address is required")
 	}
-	if c.APIKey == "" {
+	if c.APIKey == "" && !c.UseStubSynthesizer {
 		return fmt.Errorf("config: api_key is required (set in NUPI_ADAPTER_CONFIG)")
 	}
 	if c.VoiceID == "" {

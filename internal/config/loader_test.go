@@ -143,6 +143,77 @@ func TestLoaderCacheDisabledExplicitly(t *testing.T) {
 	}
 }
 
+func TestLoaderStubSynthesizer(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG": `{"use_stub_synthesizer": true}`,
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.UseStubSynthesizer {
+		t.Error("UseStubSynthesizer should be true")
+	}
+	if cfg.APIKey != "" {
+		t.Errorf("APIKey = %q, want empty", cfg.APIKey)
+	}
+}
+
+func TestLoaderStubSynthesizerEnvOverride(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_USE_STUB_SYNTHESIZER": "true",
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.UseStubSynthesizer {
+		t.Error("UseStubSynthesizer should be true from env override")
+	}
+}
+
+func TestLoaderStubSynthesizerEnvOverrideOne(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_USE_STUB_SYNTHESIZER": "1",
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.UseStubSynthesizer {
+		t.Error("UseStubSynthesizer should be true from env '1'")
+	}
+}
+
+func TestLoaderStubSynthesizerEnvFalse(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG":               `{"api_key": "sk-test", "use_stub_synthesizer": true}`,
+		"NUPI_ADAPTER_USE_STUB_SYNTHESIZER": "false",
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.UseStubSynthesizer {
+		t.Error("UseStubSynthesizer should be false when env override is 'false'")
+	}
+}
+
+func TestLoaderStubSynthesizerEnvInvalid(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_USE_STUB_SYNTHESIZER": "banana",
+	})
+
+	_, err := (Loader{Lookup: env}).Load()
+	if err == nil {
+		t.Fatal("expected error for invalid bool value")
+	}
+}
+
 func TestLoaderCacheDirFromDataDir(t *testing.T) {
 	env := fakeEnv(map[string]string{
 		"NUPI_ADAPTER_CONFIG":   `{"api_key": "sk-test"}`,

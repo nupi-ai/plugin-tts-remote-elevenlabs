@@ -49,6 +49,10 @@ spec:
       type: integer
       default: 100
       description: Maximum cache size in MB. Set to 0 to disable caching.
+    use_stub_synthesizer:
+      type: boolean
+      default: false
+      description: Use deterministic stub instead of ElevenLabs API. For CI/testing only.
   telemetry:
     stdout: true
     stderr: true
