@@ -52,7 +52,7 @@ type SynthesizeRequest struct {
 
 // SynthesizeStream calls the ElevenLabs streaming TTS endpoint and returns an io.ReadCloser
 // streaming the audio data. The caller must close the reader when done.
-// Audio is returned as PCM 16-bit signed little-endian mono at 22050Hz.
+// Audio is returned as PCM 16-bit signed little-endian mono at 16000Hz.
 func (c *Client) SynthesizeStream(ctx context.Context, voiceID string, req SynthesizeRequest) (io.ReadCloser, error) {
 	if voiceID == "" {
 		return nil, fmt.Errorf("elevenlabs: voice_id is required")
@@ -61,8 +61,8 @@ func (c *Client) SynthesizeStream(ctx context.Context, voiceID string, req Synth
 		return nil, fmt.Errorf("elevenlabs: text is required")
 	}
 
-	// Request PCM format (22050Hz, 16-bit mono) for direct playback without transcoding
-	url := fmt.Sprintf("%s/text-to-speech/%s/stream?output_format=pcm_22050", c.baseURL, voiceID)
+	// Request PCM format (16000Hz, 16-bit mono) for direct playback without transcoding
+	url := fmt.Sprintf("%s/text-to-speech/%s/stream?output_format=pcm_16000", c.baseURL, voiceID)
 
 	body, err := json.Marshal(req)
 	if err != nil {

@@ -42,6 +42,13 @@ spec:
       type: integer
       default: 0
       description: Latency optimization level (0-4). Higher = faster but potentially lower quality.
+    cache_dir:
+      type: string
+      description: Directory for caching synthesized audio.
+    cache_max_size_mb:
+      type: integer
+      default: 100
+      description: Maximum cache size in MB. Set to 0 to disable caching.
   telemetry:
     stdout: true
     stderr: true

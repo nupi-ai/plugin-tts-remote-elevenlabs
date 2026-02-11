@@ -21,6 +21,7 @@ import (
 	napv1 "github.com/nupi-ai/nupi/api/nap/v1"
 
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/adapterinfo"
+	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/cache"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/config"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/elevenlabs"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/server"
@@ -106,15 +107,27 @@ func main() {
 	client := elevenlabs.NewClient(cfg.APIKey)
 	logger.Info("ElevenLabs client initialized")
 
-	// STEP 5: Activate the real TTS service now that client is ready
-	realService := server.New(cfg, logger, client, recorder)
+	// STEP 5: Initialize cache (if configured)
+	var audioCache *cache.Cache
+	if cfg.CacheMaxSizeMB > 0 && cfg.CacheDir != "" {
+		var err error
+		audioCache, err = cache.New(cfg.CacheDir, int64(cfg.CacheMaxSizeMB)*1024*1024, logger)
+		if err != nil {
+			logger.Warn("failed to initialize cache, continuing without", "error", err)
+		} else {
+			logger.Info("audio cache initialized", "dir", cfg.CacheDir, "max_size_mb", cfg.CacheMaxSizeMB)
+		}
+	}
+
+	// STEP 6: Activate the real TTS service now that client is ready
+	realService := server.New(cfg, logger, client, recorder, audioCache)
 	lazyService.setServer(realService)
 
 	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
 	healthServer.SetServingStatus(serviceName, healthgrpc.HealthCheckResponse_SERVING)
 	logger.Info("adapter ready to serve requests")
 
-	// STEP 6: Setup graceful shutdown
+	// STEP 7: Setup graceful shutdown
 	go func() {
 		<-ctx.Done()
 		logger.Info("shutdown requested, stopping gRPC server")
@@ -135,7 +148,7 @@ func main() {
 		}
 	}()
 
-	// STEP 7: Wait for server to finish or error
+	// STEP 8: Wait for server to finish or error
 	select {
 	case err := <-serverErr:
 		logger.Error("gRPC server terminated with error", "error", err)

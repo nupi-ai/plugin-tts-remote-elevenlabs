@@ -9,6 +9,7 @@ import (
 	napv1 "github.com/nupi-ai/nupi/api/nap/v1"
 
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/adapterinfo"
+	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/cache"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/config"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/elevenlabs"
 	"github.com/nupi-ai/plugin-tts-remote-elevenlabs/internal/telemetry"
@@ -18,21 +19,22 @@ const (
 	defaultSampleRate = 16000
 	defaultChannels   = 1
 	defaultBitDepth   = 16
-	chunkSize         = 4096 // bytes per chunk (~25ms at 16kHz mono PCM16)
+	chunkSize         = 4096 // bytes per chunk (~128ms at 16kHz mono PCM16)
 )
 
 // Server implements the TextToSpeechService and synthesizes audio via ElevenLabs.
 type Server struct {
 	napv1.UnimplementedTextToSpeechServiceServer
 
-	cfg      config.Config
-	log      *slog.Logger
-	client   *elevenlabs.Client
-	metrics  *telemetry.Recorder
+	cfg     config.Config
+	log     *slog.Logger
+	client  elevenlabs.Synthesizer
+	metrics *telemetry.Recorder
+	cache   *cache.Cache // nil when caching is disabled
 }
 
 // New returns a new Server instance.
-func New(cfg config.Config, logger *slog.Logger, client *elevenlabs.Client, metrics *telemetry.Recorder) *Server {
+func New(cfg config.Config, logger *slog.Logger, client elevenlabs.Synthesizer, metrics *telemetry.Recorder, audioCache *cache.Cache) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -51,6 +53,7 @@ func New(cfg config.Config, logger *slog.Logger, client *elevenlabs.Client, metr
 		),
 		client:  client,
 		metrics: metrics,
+		cache:   audioCache,
 	}
 }
 
@@ -102,6 +105,21 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 		synthesisReq.OptimizeStreamingLatency = s.cfg.OptimizeStreamingLatency
 	}
 
+	// Compute cache key
+	var cacheKey string
+	if s.cache != nil {
+		cacheKey = cache.Key(text, s.cfg.Model, s.cfg.VoiceID, s.cfg.Stability, s.cfg.SimilarityBoost, s.cfg.OptimizeStreamingLatency)
+	}
+
+	// Cache hit path
+	if s.cache != nil {
+		if data, ok := s.cache.Get(cacheKey); ok {
+			logEntry.Info("cache hit", "key", cacheKey)
+			return s.streamFromBytes(data, text, stream, logEntry)
+		}
+		logEntry.Debug("cache miss", "key", cacheKey)
+	}
+
 	ctx := stream.Context()
 	start := time.Now()
 
@@ -124,6 +142,7 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 	var sequence uint64
 	buffer := make([]byte, chunkSize)
 	totalBytes := 0
+	var accumulated []byte
 
 	for {
 		select {
@@ -144,7 +163,7 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 				Data:     append([]byte{}, buffer[:n]...),
 				Sequence: sequence,
 				First:    sequence == 1,
-				Last:     false,
+				Last:     err == io.EOF,
 				Metadata: adapterinfo.SynthesisMetadata(s.cfg.Model, s.cfg.VoiceID),
 			}
 
@@ -161,6 +180,11 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 			if err := stream.Send(resp); err != nil {
 				logEntry.Error("failed to send audio chunk", "error", err, "sequence", sequence)
 				return err
+			}
+
+			// Accumulate for cache
+			if s.cache != nil {
+				accumulated = append(accumulated, buffer[:n]...)
 			}
 
 			logEntry.Debug("sent audio chunk",
@@ -186,12 +210,81 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 		"duration_sec", duration.Seconds(),
 	)
 
+	// Store in cache
+	if s.cache != nil && len(accumulated) > 0 {
+		if err := s.cache.Put(cacheKey, accumulated); err != nil {
+			logEntry.Warn("failed to store in cache", "error", err)
+		}
+	}
+
 	// Send FINISHED status
 	metadata := map[string]string{
-		"total_bytes":   fmt.Sprintf("%d", totalBytes),
-		"total_chunks":  fmt.Sprintf("%d", sequence),
-		"duration_sec":  fmt.Sprintf("%.2f", duration.Seconds()),
-		"text_length":   fmt.Sprintf("%d", len(text)),
+		"total_bytes":  fmt.Sprintf("%d", totalBytes),
+		"total_chunks": fmt.Sprintf("%d", sequence),
+		"duration_sec": fmt.Sprintf("%.2f", duration.Seconds()),
+		"text_length":  fmt.Sprintf("%d", len(text)),
+	}
+
+	return s.sendStatus(stream, napv1.SynthesisStatus_SYNTHESIS_STATUS_FINISHED, metadata)
+}
+
+// streamFromBytes streams pre-cached audio data using the same chunking logic as the live path.
+func (s *Server) streamFromBytes(data []byte, text string, stream napv1.TextToSpeechService_StreamSynthesisServer, logEntry *slog.Logger) error {
+	// Send PLAYING status
+	if err := s.sendStatus(stream, napv1.SynthesisStatus_SYNTHESIS_STATUS_PLAYING, nil); err != nil {
+		return err
+	}
+
+	var sequence uint64
+	totalBytes := len(data)
+
+	ctx := stream.Context()
+	for offset := 0; offset < len(data); offset += chunkSize {
+		if err := ctx.Err(); err != nil {
+			return s.sendStatus(stream, napv1.SynthesisStatus_SYNTHESIS_STATUS_INTERRUPTED, map[string]string{
+				"reason": err.Error(),
+			})
+		}
+
+		end := offset + chunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+
+		n := end - offset
+		sequence++
+
+		chunk := &napv1.AudioChunk{
+			Data:     data[offset:end],
+			Sequence: sequence,
+			First:    sequence == 1,
+			Last:     end == len(data),
+			Metadata: adapterinfo.SynthesisMetadata(s.cfg.Model, s.cfg.VoiceID),
+		}
+
+		samples := n / 2
+		chunk.DurationMs = uint32((samples * 1000) / defaultSampleRate)
+
+		resp := &napv1.SynthesisResponse{
+			Status: napv1.SynthesisStatus_SYNTHESIS_STATUS_PLAYING,
+			Chunk:  chunk,
+		}
+
+		if err := stream.Send(resp); err != nil {
+			return err
+		}
+	}
+
+	logEntry.Info("served from cache",
+		"total_bytes", totalBytes,
+		"chunks", sequence,
+	)
+
+	metadata := map[string]string{
+		"total_bytes":  fmt.Sprintf("%d", totalBytes),
+		"total_chunks": fmt.Sprintf("%d", sequence),
+		"text_length":  fmt.Sprintf("%d", len(text)),
+		"source":       "cache",
 	}
 
 	return s.sendStatus(stream, napv1.SynthesisStatus_SYNTHESIS_STATUS_FINISHED, metadata)

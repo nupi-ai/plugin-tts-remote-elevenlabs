@@ -4,10 +4,11 @@ import "fmt"
 
 const (
 	// DefaultListenAddr is used when the adapter runner does not inject an explicit address.
-	DefaultListenAddr = "127.0.0.1:50051"
-	DefaultVoiceID    = "UgBBYS2sOqTuMpoF3BR0" // Mark
-	DefaultModel      = "eleven_turbo_v2_5"
-	DefaultLogLevel   = "info"
+	DefaultListenAddr     = "127.0.0.1:50051"
+	DefaultVoiceID        = "UgBBYS2sOqTuMpoF3BR0" // Mark
+	DefaultModel          = "eleven_turbo_v2_5"
+	DefaultLogLevel       = "info"
+	DefaultCacheMaxSizeMB = 100
 )
 
 // Config captures bootstrap configuration extracted from environment variables
@@ -23,6 +24,10 @@ type Config struct {
 	Stability                *float64
 	SimilarityBoost          *float64
 	OptimizeStreamingLatency *int
+
+	// Cache settings
+	CacheDir       string
+	CacheMaxSizeMB int
 }
 
 // Validate applies defaults and raises an error when required fields are missing.
@@ -41,6 +46,11 @@ func (c *Config) Validate() error {
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = DefaultLogLevel
+	}
+
+	// Cache validation
+	if c.CacheMaxSizeMB < 0 {
+		return fmt.Errorf("config: cache_max_size_mb must be >= 0, got %d", c.CacheMaxSizeMB)
 	}
 
 	// Validate voice settings ranges if provided
