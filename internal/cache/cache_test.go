@@ -123,7 +123,7 @@ func TestConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			key := Key("text", "model", "voice", nil, nil, nil)
+			key := Key("text", "model", "voice", "", nil, nil, nil)
 			c.Put(key, make([]byte, 100))
 			c.Get(key)
 		}()
@@ -133,16 +133,16 @@ func TestConcurrentAccess(t *testing.T) {
 
 func TestKeyDeterministic(t *testing.T) {
 	s := 0.5
-	k1 := Key("hello", "m1", "v1", &s, nil, nil)
-	k2 := Key("hello", "m1", "v1", &s, nil, nil)
+	k1 := Key("hello", "m1", "v1", "", &s, nil, nil)
+	k2 := Key("hello", "m1", "v1", "", &s, nil, nil)
 	if k1 != k2 {
 		t.Errorf("same input produced different keys: %q vs %q", k1, k2)
 	}
 }
 
 func TestKeyDifferent(t *testing.T) {
-	k1 := Key("hello", "m1", "v1", nil, nil, nil)
-	k2 := Key("world", "m1", "v1", nil, nil, nil)
+	k1 := Key("hello", "m1", "v1", "", nil, nil, nil)
+	k2 := Key("world", "m1", "v1", "", nil, nil, nil)
 	if k1 == k2 {
 		t.Error("different input produced same key")
 	}
@@ -208,9 +208,9 @@ func TestKeyWithOptimizeLatency(t *testing.T) {
 	latency0 := 0
 	latency4 := 4
 
-	k1 := Key("hello", "m1", "v1", nil, nil, &latency0)
-	k2 := Key("hello", "m1", "v1", nil, nil, &latency4)
-	k3 := Key("hello", "m1", "v1", nil, nil, nil)
+	k1 := Key("hello", "m1", "v1", "", nil, nil, &latency0)
+	k2 := Key("hello", "m1", "v1", "", nil, nil, &latency4)
+	k3 := Key("hello", "m1", "v1", "", nil, nil, nil)
 
 	if k1 == k2 {
 		t.Error("different optimize_latency should produce different keys")

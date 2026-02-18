@@ -48,16 +48,22 @@ func testConfig() config.Config {
 		VoiceID:    "test-voice",
 		Model:      "test-model",
 		LogLevel:   "error",
+		Language:   "client",
 	}
 }
 
 // setup creates a bufconn gRPC server+client pair and returns the TTS client and a cleanup func.
 func setup(t *testing.T, synth elevenlabs.Synthesizer, audioCache *cache.Cache) (napv1.TextToSpeechServiceClient, func()) {
+	return setupWithConfig(t, testConfig(), synth, audioCache)
+}
+
+// setupWithConfig creates a bufconn gRPC server+client pair with a custom config.
+func setupWithConfig(t *testing.T, cfg config.Config, synth elevenlabs.Synthesizer, audioCache *cache.Cache) (napv1.TextToSpeechServiceClient, func()) {
 	t.Helper()
 	buf := bufconn.Listen(1024 * 1024)
 
 	srv := grpc.NewServer()
-	svc := New(testConfig(), slog.Default(), synth, nil, audioCache)
+	svc := New(cfg, slog.Default(), synth, nil, audioCache)
 	napv1.RegisterTextToSpeechServiceServer(srv, svc)
 
 	go func() {
@@ -348,7 +354,7 @@ func TestStreamSynthesisCacheHit(t *testing.T) {
 	}
 
 	cfg := testConfig()
-	key := cache.Key("cached text", cfg.Model, cfg.VoiceID, cfg.Stability, cfg.SimilarityBoost, cfg.OptimizeStreamingLatency)
+	key := cache.Key("cached text", cfg.Model, cfg.VoiceID, "auto", cfg.Stability, cfg.SimilarityBoost, cfg.OptimizeStreamingLatency)
 	cachedData := make([]byte, 4096)
 	for i := range cachedData {
 		cachedData[i] = 0xAB
@@ -428,7 +434,7 @@ func TestStreamSynthesisCacheMiss(t *testing.T) {
 
 	// Verify data was cached
 	cfg := testConfig()
-	key := cache.Key("new text", cfg.Model, cfg.VoiceID, cfg.Stability, cfg.SimilarityBoost, cfg.OptimizeStreamingLatency)
+	key := cache.Key("new text", cfg.Model, cfg.VoiceID, "auto", cfg.Stability, cfg.SimilarityBoost, cfg.OptimizeStreamingLatency)
 	cached, ok := audioCache.Get(key)
 	if !ok {
 		t.Error("data should have been stored in cache after miss")
@@ -441,5 +447,81 @@ func TestStreamSynthesisCacheMiss(t *testing.T) {
 	last := responses[len(responses)-1]
 	if last.Metadata["source"] == "cache" {
 		t.Error("FINISHED metadata should not have source=cache on miss path")
+	}
+}
+
+func TestStreamSynthesisLanguageCodePassedToAPI(t *testing.T) {
+	pcm := make([]byte, 100)
+	mock := &mockSynthesizer{data: pcm}
+
+	cfg := testConfig()
+	cfg.Language = "pl"
+	client, cleanup := setupWithConfig(t, cfg, mock, nil)
+	defer cleanup()
+
+	stream, err := client.StreamSynthesis(context.Background(), &napv1.StreamSynthesisRequest{
+		Text: "test language",
+	})
+	if err != nil {
+		t.Fatalf("StreamSynthesis: %v", err)
+	}
+	collectResponses(t, stream)
+
+	if !mock.called {
+		t.Fatal("synthesizer was not called")
+	}
+	if mock.req.LanguageCode != "pl" {
+		t.Errorf("LanguageCode = %q, want %q", mock.req.LanguageCode, "pl")
+	}
+}
+
+func TestStreamSynthesisAutoOmitsLanguageCode(t *testing.T) {
+	pcm := make([]byte, 100)
+	mock := &mockSynthesizer{data: pcm}
+
+	cfg := testConfig()
+	cfg.Language = "auto"
+	client, cleanup := setupWithConfig(t, cfg, mock, nil)
+	defer cleanup()
+
+	stream, err := client.StreamSynthesis(context.Background(), &napv1.StreamSynthesisRequest{
+		Text: "test auto",
+	})
+	if err != nil {
+		t.Fatalf("StreamSynthesis: %v", err)
+	}
+	collectResponses(t, stream)
+
+	if !mock.called {
+		t.Fatal("synthesizer was not called")
+	}
+	if mock.req.LanguageCode != "" {
+		t.Errorf("LanguageCode = %q, want empty (auto mode)", mock.req.LanguageCode)
+	}
+}
+
+func TestStreamSynthesisClientModeWithMetadata(t *testing.T) {
+	pcm := make([]byte, 100)
+	mock := &mockSynthesizer{data: pcm}
+
+	cfg := testConfig()
+	cfg.Language = "client"
+	client, cleanup := setupWithConfig(t, cfg, mock, nil)
+	defer cleanup()
+
+	stream, err := client.StreamSynthesis(context.Background(), &napv1.StreamSynthesisRequest{
+		Text:     "test client mode",
+		Metadata: map[string]string{"nupi.lang.iso1": "de"},
+	})
+	if err != nil {
+		t.Fatalf("StreamSynthesis: %v", err)
+	}
+	collectResponses(t, stream)
+
+	if !mock.called {
+		t.Fatal("synthesizer was not called")
+	}
+	if mock.req.LanguageCode != "de" {
+		t.Errorf("LanguageCode = %q, want %q", mock.req.LanguageCode, "de")
 	}
 }

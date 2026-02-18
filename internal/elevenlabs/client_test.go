@@ -156,3 +156,64 @@ func TestSynthesizeStreamEmptyText(t *testing.T) {
 		t.Fatal("expected error for empty text")
 	}
 }
+
+func TestSynthesizeStreamLanguageCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("unmarshal body: %v", err)
+		}
+		if payload["language_code"] != "pl" {
+			t.Errorf("language_code = %v, want %q", payload["language_code"], "pl")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &Client{
+		httpClient: srv.Client(),
+		apiKey:     "test-key",
+		baseURL:    srv.URL,
+	}
+
+	rc, err := c.SynthesizeStream(context.Background(), "v1", SynthesizeRequest{
+		Text:         "hello",
+		ModelID:      "m1",
+		LanguageCode: "pl",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rc.Close()
+}
+
+func TestSynthesizeStreamOmitsEmptyLanguageCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("unmarshal body: %v", err)
+		}
+		if _, exists := payload["language_code"]; exists {
+			t.Errorf("language_code should be omitted when empty, got %v", payload["language_code"])
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &Client{
+		httpClient: srv.Client(),
+		apiKey:     "test-key",
+		baseURL:    srv.URL,
+	}
+
+	rc, err := c.SynthesizeStream(context.Background(), "v1", SynthesizeRequest{
+		Text:    "hello",
+		ModelID: "m1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rc.Close()
+}

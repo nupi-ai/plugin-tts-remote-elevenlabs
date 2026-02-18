@@ -79,7 +79,7 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 		return s.sendError(stream, "text is required")
 	}
 
-	// Resolve language from config mode and request metadata (observability only).
+	// Resolve language from config mode and request metadata.
 	resolvedLang := resolveLanguage(s.cfg.Language, req.GetMetadata())
 	logEntry = logEntry.With("language", resolvedLang)
 
@@ -95,6 +95,12 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 	synthesisReq := elevenlabs.SynthesizeRequest{
 		Text:    text,
 		ModelID: s.cfg.Model,
+	}
+
+	// Pass language_code to ElevenLabs when a specific language is resolved.
+	// "auto" means let ElevenLabs auto-detect, so we omit the field.
+	if resolvedLang != "auto" {
+		synthesisReq.LanguageCode = resolvedLang
 	}
 
 	// Apply voice settings if configured
@@ -113,7 +119,7 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 	// Compute cache key
 	var cacheKey string
 	if s.cache != nil {
-		cacheKey = cache.Key(text, s.cfg.Model, s.cfg.VoiceID, s.cfg.Stability, s.cfg.SimilarityBoost, s.cfg.OptimizeStreamingLatency)
+		cacheKey = cache.Key(text, s.cfg.Model, s.cfg.VoiceID, resolvedLang, s.cfg.Stability, s.cfg.SimilarityBoost, s.cfg.OptimizeStreamingLatency)
 	}
 
 	// Cache hit path
@@ -313,12 +319,13 @@ func (s *Server) sendError(stream napv1.TextToSpeechService_StreamSynthesisServe
 	return fmt.Errorf("synthesis error: %s", message)
 }
 
-// resolveLanguage returns the effective language for observability logging
-// based on the configured language mode and request metadata.
+// resolveLanguage returns the effective ISO 639-1 language code to pass to the
+// ElevenLabs API as language_code, based on the configured language mode and
+// request metadata.
 //
 // Modes:
 //   - "client": read nupi.lang.iso1 from metadata; fall back to "auto" if absent.
-//   - "auto":   always return "auto" (ignore metadata).
+//   - "auto":   always return "auto" (ElevenLabs auto-detects, language_code omitted).
 //   - other:    return the configured ISO 639-1 code verbatim (ignore metadata).
 func resolveLanguage(configLang string, metadata map[string]string) string {
 	if configLang != "client" {

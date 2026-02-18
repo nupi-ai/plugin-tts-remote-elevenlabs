@@ -29,7 +29,8 @@ type Config struct {
 	SimilarityBoost          *float64
 	OptimizeStreamingLatency *int
 
-	// Language mode: "client" (default), "auto", or specific ISO 639-1 code.
+	// Language mode: "client" (default), "auto", or ISO 639-1 code
+	// (e.g. "pl", "en"). Passed to ElevenLabs API as language_code.
 	Language string
 
 	// Cache settings

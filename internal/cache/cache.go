@@ -99,9 +99,9 @@ func (c *Cache) Put(key string, data []byte) error {
 }
 
 // Key produces a deterministic SHA-256 hex key from synthesis parameters.
-func Key(text, model, voiceID string, stability, similarityBoost *float64, optimizeLatency *int) string {
+func Key(text, model, voiceID, languageCode string, stability, similarityBoost *float64, optimizeLatency *int) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "text=%s\nmodel=%s\nvoice=%s\n", text, model, voiceID)
+	fmt.Fprintf(h, "text=%s\nmodel=%s\nvoice=%s\nlang=%s\n", text, model, voiceID, languageCode)
 	if stability != nil {
 		fmt.Fprintf(h, "stability=%f\n", *stability)
 	}
