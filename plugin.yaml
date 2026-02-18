@@ -49,6 +49,16 @@ spec:
       type: integer
       default: 100
       description: Maximum cache size in MB. Set to 0 to disable caching.
+    language:
+      type: string
+      default: client
+      description: >
+        Language mode for synthesis. "client" (default) reads the language from
+        the nupi.lang.iso1 request metadata propagated by the daemon; falls back
+        to auto-detect if no metadata is present. "auto" always lets ElevenLabs
+        auto-detect the language from text, ignoring client metadata. A specific
+        ISO 639-1 code (e.g. "en", "de") records that language for observability;
+        ElevenLabs still auto-detects from text content.
     use_stub_synthesizer:
       type: boolean
       default: false

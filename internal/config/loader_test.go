@@ -62,6 +62,65 @@ func TestLoaderDefaults(t *testing.T) {
 	if cfg.CacheMaxSizeMB != DefaultCacheMaxSizeMB {
 		t.Errorf("CacheMaxSizeMB = %d, want default %d", cfg.CacheMaxSizeMB, DefaultCacheMaxSizeMB)
 	}
+	if cfg.Language != DefaultLanguage {
+		t.Errorf("Language = %q, want default %q", cfg.Language, DefaultLanguage)
+	}
+}
+
+func TestLoaderLanguageFromJSON(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG": `{"api_key": "sk-test", "language": "pl"}`,
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Language != "pl" {
+		t.Errorf("Language = %q, want %q", cfg.Language, "pl")
+	}
+}
+
+func TestLoaderLanguageAutoFromJSON(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG": `{"api_key": "sk-test", "language": "auto"}`,
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Language != "auto" {
+		t.Errorf("Language = %q, want %q", cfg.Language, "auto")
+	}
+}
+
+func TestLoaderLanguageWhitespaceFromJSON(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG": `{"api_key": "sk-test", "language": "  client  "}`,
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Language != "client" {
+		t.Errorf("Language = %q, want %q (whitespace should be trimmed)", cfg.Language, "client")
+	}
+}
+
+func TestLoaderLanguageCaseInsensitive(t *testing.T) {
+	env := fakeEnv(map[string]string{
+		"NUPI_ADAPTER_CONFIG": `{"api_key": "sk-test", "language": "CLIENT"}`,
+	})
+
+	cfg, err := (Loader{Lookup: env}).Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Language != "client" {
+		t.Errorf("Language = %q, want %q (should be lowercased)", cfg.Language, "client")
+	}
 }
 
 func TestLoaderEnvOverrides(t *testing.T) {

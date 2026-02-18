@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	// DefaultListenAddr is used when the adapter runner does not inject an explicit address.
@@ -9,6 +12,7 @@ const (
 	DefaultModel          = "eleven_turbo_v2_5"
 	DefaultLogLevel       = "info"
 	DefaultCacheMaxSizeMB = 100
+	DefaultLanguage       = "client"
 )
 
 // Config captures bootstrap configuration extracted from environment variables
@@ -24,6 +28,9 @@ type Config struct {
 	Stability                *float64
 	SimilarityBoost          *float64
 	OptimizeStreamingLatency *int
+
+	// Language mode: "client" (default), "auto", or specific ISO 639-1 code.
+	Language string
 
 	// Cache settings
 	CacheDir       string
@@ -49,6 +56,13 @@ func (c *Config) Validate() error {
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = DefaultLogLevel
+	}
+	c.Language = strings.ToLower(strings.TrimSpace(c.Language))
+	if c.Language == "" {
+		c.Language = DefaultLanguage
+	}
+	if c.Language != "client" && c.Language != "auto" && len(c.Language) > 8 {
+		return fmt.Errorf("config: language must be 'client', 'auto', or a short ISO 639-1 code, got %q", c.Language)
 	}
 
 	// Cache validation

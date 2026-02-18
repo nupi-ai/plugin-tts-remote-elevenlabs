@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	napv1 "github.com/nupi-ai/nupi/api/nap/v1"
@@ -78,6 +79,10 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 		return s.sendError(stream, "text is required")
 	}
 
+	// Resolve language from config mode and request metadata (observability only).
+	resolvedLang := resolveLanguage(s.cfg.Language, req.GetMetadata())
+	logEntry = logEntry.With("language", resolvedLang)
+
 	logEntry.Info("synthesis request received")
 
 	// Send STARTED status
@@ -134,7 +139,6 @@ func (s *Server) StreamSynthesis(req *napv1.StreamSynthesisRequest, stream napv1
 	// Send PLAYING status
 	if err := s.sendStatus(stream, napv1.SynthesisStatus_SYNTHESIS_STATUS_PLAYING, nil); err != nil {
 		logEntry.Error("failed to send playing status", "error", err)
-		audioStream.Close()
 		return err
 	}
 
@@ -307,4 +311,21 @@ func (s *Server) sendError(stream napv1.TextToSpeechService_StreamSynthesisServe
 		return err
 	}
 	return fmt.Errorf("synthesis error: %s", message)
+}
+
+// resolveLanguage returns the effective language for observability logging
+// based on the configured language mode and request metadata.
+//
+// Modes:
+//   - "client": read nupi.lang.iso1 from metadata; fall back to "auto" if absent.
+//   - "auto":   always return "auto" (ignore metadata).
+//   - other:    return the configured ISO 639-1 code verbatim (ignore metadata).
+func resolveLanguage(configLang string, metadata map[string]string) string {
+	if configLang != "client" {
+		return configLang
+	}
+	if code := strings.TrimSpace(metadata["nupi.lang.iso1"]); code != "" {
+		return code
+	}
+	return "auto"
 }

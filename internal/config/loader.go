@@ -63,6 +63,7 @@ func applyJSON(raw string, cfg *Config) error {
 		OptimizeStreamingLatency *int     `json:"optimize_streaming_latency"`
 		CacheDir                 string   `json:"cache_dir"`
 		CacheMaxSizeMB           *int     `json:"cache_max_size_mb"`
+		Language                 string   `json:"language"`
 		UseStubSynthesizer       bool     `json:"use_stub_synthesizer"`
 	}
 	var payload jsonConfig
@@ -98,6 +99,9 @@ func applyJSON(raw string, cfg *Config) error {
 	}
 	if payload.CacheMaxSizeMB != nil {
 		cfg.CacheMaxSizeMB = *payload.CacheMaxSizeMB
+	}
+	if payload.Language != "" {
+		cfg.Language = payload.Language
 	}
 	if payload.UseStubSynthesizer {
 		cfg.UseStubSynthesizer = true
